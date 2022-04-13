@@ -20,8 +20,8 @@ export const jsonParse = (jsonStr: string) => {
     const parseObj = (): object | undefined => {
         if (getChar() !== "{") return undefined;
         /* Move to char next to "{" */
-        idx++;
-        /* Object can be empty. Consume the white spaces */
+        moveNext();
+        /* Consume the white spaces */
         skipSpaces();
 
         const obj: {[index: string]: any} = {};
@@ -42,7 +42,7 @@ export const jsonParse = (jsonStr: string) => {
         }
 
         /* Move to char next to "}" */
-        idx++;
+        moveNext();
         /* Return the parsed object */
         return obj;
     }
@@ -50,7 +50,7 @@ export const jsonParse = (jsonStr: string) => {
     const parseArray = (): any[] | undefined => {
         if (getChar() !== "[") return;
         /* Move to char next to "[" */
-        idx++;
+        moveNext();
 
         const array: any[] = [];
         let initial = true;
@@ -62,17 +62,18 @@ export const jsonParse = (jsonStr: string) => {
         }
 
         /* Move to char next to "]" */
-        idx++;
+        moveNext();
         return array;
     }
 
     const parseString = (): string | undefined => {
         if (getChar() !== `"`) return undefined;
-        idx++;
+        moveNext();
         const start = idx;
         //TODO: This does not consider escaped `"`
         const end = jsonStr.indexOf('"', idx + 1);
-
+        /* If there is no closing double quote, throw error */
+        if (end < 0) expectedButGotNothing(`"`);
         /* Move to char next to `"` */
         idx = end + 1;
         return jsonStr.slice(start, end)
@@ -81,20 +82,20 @@ export const jsonParse = (jsonStr: string) => {
     const parseNum = (): number | undefined => {
         const start = idx;
         /* Integral part */
-        if (getChar() === "-") idx++;
-        if (getChar() === "0") idx++;
+        if (getChar() === "-") moveNext();
+        if (getChar() === "0") moveNext();
         else consumeDigits();
         /* Fractional part */
-        if (jsonStr[idx] === ".") { idx++; consumeDigits(); }
+        if (jsonStr[idx] === ".") { moveNext(); consumeDigits(); }
         /* Exponent */
         if (["e", "E"].includes(jsonStr[idx])) {
-            idx++;
+            moveNext();
             if (["+", "-"].includes(jsonStr[idx])) idx++;
             consumeDigits();
         }
 
         if (start === idx) return undefined;
-        return parseInt(jsonStr.slice(start, idx));
+        return Number(jsonStr.slice(start, idx));
     }
 
     const parseTrue = (): boolean | undefined => parseSingleValue("true", true);
@@ -109,15 +110,28 @@ export const jsonParse = (jsonStr: string) => {
         return returnValue;
     }
 
-    const getChar = (): string => jsonStr[idx];
+    const consumeComma = (): void => {
+        if (getChar() === ",") moveNext();
+        else throw expectedButGot(":", getChar());
+    };
 
-    const consumeComma = (): void => { if (getChar() === ",") idx++ };
+    const consumeColon = (): void => {
+        if (getChar() === ":") moveNext();
+        else throw expectedButGot(",", getChar());
+    };
 
-    const consumeColon = (): void => { if (getChar() === ":") idx++ };
+    const skipSpaces = (): void =>  { while ([" ", "\n", "\r", "\t"].includes(getChar())) moveNext(); };
 
-    const skipSpaces = (): void =>  { while ([" ", "\n", "\r", "\t"].includes(getChar())) idx++; };
+    const consumeDigits = (): void => { while (!isNaN(parseInt(getChar()))) moveNext(); }
 
-    const consumeDigits = (): void => { while (!isNaN(parseInt(getChar()))) idx++; }
+    const getChar = (): string => {
+        return jsonStr[idx];
+    }
+
+    const moveNext = (): void => { idx++; }
 
     return parseValue();
 }
+
+const expectedButGot = (expected: string, actual: string): string => `Expected ${expected} but got ${actual}`;
+const expectedButGotNothing = (expected: string) => `Expected ${expected} but found no occurrence of it`;
